@@ -1,0 +1,553 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>彈珠台</title>
+  <style>
+    body {
+      margin: 0;
+      background: #0f161d;
+      font-family: sans-serif;
+      color: #eee;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      position: relative;
+    }
+
+    #logo {
+      position: absolute;
+      top: 10px;
+      left: 20px;
+      font-size: 36px;
+      font-weight: bold;
+      color: #ffffff;
+      letter-spacing: 2px;
+      font-family: 'Arial Black', sans-serif;
+      text-shadow: 2px 2px 4px rgba(0,0,0,0.6);
+    }
+
+    #walletRow {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      margin-top: 60px;
+      gap: 10px;
+    }
+
+    #walletContainer {
+      background-color: #3b82f6;
+      padding: 8px 20px;
+      border-radius: 10px;
+      font-size: 18px;
+      font-weight: bold;
+      color: white;
+    }
+
+    #topupBtn {
+      background-color: #22c55e;
+      color: #fff;
+      border: none;
+      padding: 8px 16px;
+      border-radius: 10px;
+      font-size: 14px;
+      cursor: pointer;
+    }
+
+    #mainContainer {
+      display: flex;
+      flex-direction: row;
+      margin-top: 20px;
+    }
+
+    #leftControls {
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      background: #1e293b;
+      border-radius: 12px;
+      padding: 20px;
+      margin-right: 20px;
+      height: 400px;
+      gap: 20px;
+    }
+
+    .control-label {
+      font-size: 14px;
+      margin-bottom: 4px;
+      color: #cbd5e1;
+    }
+
+    .control-input,
+    .control-select {
+      padding: 10px 12px;
+      font-size: 16px;
+      border: none;
+      border-radius: 6px;
+      background-color: #334155;
+      color: #fff;
+      width: 180px;
+    }
+
+    #betBtn {
+      margin-top: auto;
+      background-color: #22c55e;
+      color: white;
+      font-size: 18px;
+      font-weight: bold;
+      padding: 14px;
+      border: none;
+      border-radius: 10px;
+      cursor: pointer;
+    }
+
+    canvas {
+      background: #13212e;
+      border-radius: 10px;
+      width: 600px;
+      height: 600px;
+    }
+
+    #recentPayoutsContainer {
+      margin-left: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      height: 220px;
+      overflow: hidden;
+      margin-top: 90px;
+    }
+
+    .recentPayout {
+      width: 60px;
+      height: 50px;
+      border-radius: 10px;
+      background: #fff;
+      color: #000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: bold;
+      font-size: 16px;
+      position: relative;
+      transform: translateY(-60px);
+      animation: slideDown 0.4s ease forwards;
+    }
+
+    @keyframes slideDown {
+      to {
+        transform: translateY(0);
+      }
+    }
+  </style>
+</head>
+
+<body>
+
+<div id="logo">Chips</div>
+
+<div id="walletRow">
+  <div id="walletContainer">錢包：$5000.00</div>
+  <button id="topupBtn" onclick="topUpWallet()">儲值 +1000</button>
+</div>
+
+<div id="mainContainer">
+  <div id="leftControls">
+    <div>
+      <div class="control-label">每顆球下注金額</div>
+      <input id="betInput" type="number" step="5" class="control-input" value="100" min="5" />
+    </div>
+    <div>
+      <div class="control-label">選擇丟幾顆球</div>
+      <select id="ballCountSelect" class="control-select">
+        <option value="1">1 顆</option>
+        <option value="5">5 顆</option>
+        <option value="10">10 顆</option>
+        <option value="100">100 顆</option>
+      </select>
+    </div>
+    <button id="betBtn" onclick="placeBet()">下注</button>
+  </div>
+
+  <canvas id="gameCanvas" width="600" height="600"></canvas>
+
+  <div id="recentPayoutsContainer"></div>
+</div>
+
+<script>
+const canvas = document.getElementById("gameCanvas");
+const ctx = canvas.getContext("2d");
+
+// === 核心設定參數 ===
+const binCount = 17;
+const spacing = 10;
+const boxHeight = 40;
+const boxBounceHeight = 5;
+const pinRadius = 4;
+const ballRadius = 8;
+const bias = 9;
+const fallSpeedIncrement = 0.4;
+
+let wallet = 5000;
+let betPerBall = 100;
+let ballsToDrop = 1;
+
+const payouts = [
+  100, 10, 4, 2.0, 1.5, 1.0, 0.6, 0.4,
+  0.2, 0.4, 0.6, 1.0, 1.5, 2.0, 4, 10, 100
+];
+
+const balls = [];
+const payoutBoxes = new Array(binCount).fill(0).map(() => ({ animationTime: Math.PI }));
+let recentPayouts = Array(4).fill({ payout: "0.0", color: "#fff" });
+
+const pinXs = Array.from({ length: binCount + 1 }, (_, i) => (i + 1) * (canvas.width / (binCount + 2)));
+const pins = [];
+let firstRowRange = { min: canvas.width / 2, max: canvas.width / 2 };
+const pinFlashTimers = [];
+
+// ✅ 音效設定（為每個倍率建立 Audio 物件 + 設定個別音量）
+const payoutSounds = {
+  0.2: new Audio("/Users/d/Desktop/Plinko_ball_Project/bin_sound_effect/1.mp3"),
+  0.4: new Audio("/Users/d/Desktop/Plinko_ball_Project/bin_sound_effect/2.mp3"),
+  0.6: new Audio("/Users/d/Desktop/Plinko_ball_Project/bin_sound_effect/3.mp3"),
+  1.0: new Audio("/Users/d/Desktop/Plinko_ball_Project/bin_sound_effect/4.mp3"),
+  1.5: new Audio("/Users/d/Desktop/Plinko_ball_Project/bin_sound_effect/5.mp3"),
+  2.0: new Audio("/Users/d/Desktop/Plinko_ball_Project/bin_sound_effect/6.mp3"),
+  4.0: new Audio("/Users/d/Desktop/Plinko_ball_Project/bin_sound_effect/7.mp3"),
+  10.0: new Audio("/Users/d/Desktop/Plinko_ball_Project/bin_sound_effect/8.mp3"),
+  100.0: new Audio("/Users/d/Desktop/Plinko_ball_Project/bin_sound_effect/9.mp3"),
+};
+
+// ✅ 設定各倍率音效的音量（可以調整這裡）
+payoutSounds[0.2].volume = 0.3;
+payoutSounds[0.4].volume = 0.3;
+payoutSounds[0.6].volume = 0.4;
+payoutSounds[1.0].volume = 0.2;
+payoutSounds[1.5].volume = 0.5;
+payoutSounds[2.0].volume = 0.5;
+payoutSounds[4.0].volume = 0.6;
+payoutSounds[10.0].volume = 0.6;
+payoutSounds[100.0].volume = 0.7;
+
+// 下注音效
+const betAudio = new Audio("/Users/d/Desktop/Plinko_ball_Project/bet.mp3");
+betAudio.volume = 0.5;
+
+function playBetSound() {
+  betAudio.currentTime = 0;
+  betAudio.play();
+}
+
+// ✅ 播放對應倍率音效，並在 1 秒後強制停止
+function playPayoutSound(payout) {
+  const sound = payoutSounds[payout];
+  if (sound) {
+    sound.currentTime = 0;
+    sound.play();
+
+    setTimeout(() => {
+      sound.pause();
+      sound.currentTime = 0;
+    }, 1000);  // ✅ 限制播放 1 秒
+  }
+}
+
+// 更新錢包顯示
+function updateWalletDisplay() {
+  document.getElementById("walletContainer").innerText = `錢包：$${wallet.toFixed(2)}`;
+}
+
+// 處理下注行為
+function placeBet() {
+  const input = document.getElementById("betInput");
+  const select = document.getElementById("ballCountSelect");
+
+  betPerBall = Math.max(5, parseInt(input.value) || 100);
+  ballsToDrop = parseInt(select.value);
+
+  const totalCost = betPerBall * ballsToDrop;
+  if (wallet < totalCost) {
+    alert("餘額不足！");
+    return;
+  }
+
+  wallet -= totalCost;
+  updateWalletDisplay();
+
+  playBetSound();
+
+  for (let i = 0; i < ballsToDrop; i++) {
+    balls.push(new Ball());
+  }
+}
+class Ball {
+  constructor() {
+    const rangeWidth = firstRowRange.max - firstRowRange.min;
+    const center = (firstRowRange.max + firstRowRange.min) / 2;
+    const reducedWidth = rangeWidth * 0.7;
+    const minX = center - reducedWidth / 2;
+    const maxX = center + reducedWidth / 2;
+
+    this.x = Math.random() * (maxX - minX) + minX;
+    this.y = 60;
+    this.vx = 0;
+    this.vy = 0;
+    this.radius = ballRadius;
+    this.done = false;
+    this.opacity = 1;
+    this.fadeStart = null;
+  }
+
+  update(pins) {
+    if (this.done && this.fadeStart !== null) {
+      const fadeProgress = (Date.now() - this.fadeStart) / 1000;
+      this.opacity = Math.max(1 - fadeProgress, 0);
+      if (this.opacity <= 0) return "remove";
+      return;
+    }
+
+    if (this.done) return;
+
+    this.x += this.vx;
+    this.y += this.vy;
+    this.vy += fallSpeedIncrement;
+
+    // 防止出界
+    if (this.x < this.radius) this.x = this.radius;
+    if (this.x > canvas.width - this.radius) this.x = canvas.width - this.radius;
+
+    // ✅ 檢查與釘子的碰撞，但不播放音效
+    for (let i = 0; i < pins.length; i++) {
+      const pin = pins[i];
+      const dx = this.x - pin.x;
+      const dy = this.y - pin.y;
+      const distSq = dx * dx + dy * dy;
+      const radiusSum = this.radius + pinRadius;
+
+      if (distSq < radiusSum * radiusSum) {
+        const distance = Math.sqrt(distSq);
+        const overlap = radiusSum - distance;
+        const angle = Math.atan2(dy, dx);
+
+        this.x += Math.cos(angle) * (overlap + 1.8);
+        this.y += Math.sin(angle) * (overlap + 1.8);
+
+        const normal = { x: Math.cos(angle), y: Math.sin(angle) };
+        const v = { x: this.vx, y: this.vy };
+        const dot = v.x * normal.x + v.y * normal.y;
+
+        this.vx = (v.x - 2 * dot * normal.x) * 0.4;
+        this.vy = (v.y - 2 * dot * normal.y) * 0.7;
+
+        if (this.x > canvas.width / 2 + spacing) this.vx -= bias / 18;
+        else if (this.x < canvas.width / 2 - spacing) this.vx += bias / 18;
+
+        this.x += Math.random() < 0.4 ? -0.1 : 1;
+
+        pinFlashTimers[i] = 40;
+      }
+    }
+
+    // ✅ 檢查落入底部格子
+    const ground = canvas.height - boxHeight - 10;
+    if (this.y >= ground) {
+      this.y = ground;
+      this.vx = 0;
+      this.vy = 0;
+      this.done = true;
+      this.fadeStart = Date.now();
+
+      let binIndex = 0;
+      if (this.x >= pinXs[binCount]) {
+        binIndex = binCount - 1;
+      } else {
+        for (let i = 0; i < binCount; i++) {
+          if (this.x >= pinXs[i] && this.x < pinXs[i + 1]) {
+            binIndex = i;
+            break;
+          }
+        }
+      }
+
+      const payout = payouts[binIndex];
+      const earned = payout * betPerBall;
+      wallet += earned;
+      updateWalletDisplay();
+
+      playPayoutSound(payout);  // ✅ 根據倍率播放對應音效（單獨音量、最多播放 1 秒）
+
+      payoutBoxes[binIndex].animationTime = 0;
+      addRecentPayout(binIndex, payout);
+    }
+  }
+
+  draw() {
+    ctx.globalAlpha = this.opacity;
+    ctx.beginPath();
+    ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+    ctx.fillStyle = "silver";
+    ctx.fill();
+    ctx.closePath();
+    ctx.globalAlpha = 1;
+  }
+}
+function drawPins() {
+  for (let i = 0; i < pins.length; i++) {
+    const pin = pins[i];
+
+    if (pinFlashTimers[i] > 0) {
+      const glowStrength = pinFlashTimers[i] / 80;
+      const glowRadius = pin.radius * 6;
+      const gradient = ctx.createRadialGradient(pin.x, pin.y, 0, pin.x, pin.y, glowRadius);
+      gradient.addColorStop(0, `rgba(255, 255, 200, ${0.8 * glowStrength})`);
+      gradient.addColorStop(1, "rgba(255, 255, 200, 0)");
+      ctx.fillStyle = gradient;
+      ctx.fillRect(pin.x - glowRadius, pin.y - glowRadius, glowRadius * 2, glowRadius * 2);
+      pinFlashTimers[i]--;
+    }
+
+    ctx.beginPath();
+    ctx.arc(pin.x, pin.y, pin.radius, 0, Math.PI * 2);
+    ctx.fillStyle = "#fff";
+    ctx.fill();
+    ctx.closePath();
+  }
+}
+
+function drawRoundedClippedBox(x, y, w, h, r, fillStyle, text) {
+  ctx.save();
+  ctx.beginPath();
+  ctx.roundRect(x, y, w, h, r);
+  ctx.clip();
+  ctx.fillStyle = fillStyle;
+  ctx.fillRect(x, y, w, h);
+
+  ctx.fillStyle = "#000";
+  ctx.font = `${Math.min(20, w * 0.4)}px sans-serif`;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText(text, x + w / 2, y + h / 2);
+  ctx.restore();
+}
+
+function drawPayoutBoxes() {
+  for (let i = 0; i < binCount; i++) {
+    const leftX = pinXs[i];
+    const rightX = pinXs[i + 1];
+    const fullWidth = rightX - leftX;
+    const boxWidth = fullWidth - 6;
+    const centerX = (leftX + rightX) / 2;
+    const boxX = centerX - boxWidth / 2;
+    const bounce = Math.sin(payoutBoxes[i].animationTime) * boxBounceHeight;
+    const y = canvas.height - boxHeight - 10 + bounce;
+
+    payoutBoxes[i].animationTime += 0.2;
+    if (payoutBoxes[i].animationTime > Math.PI) payoutBoxes[i].animationTime = Math.PI;
+
+    drawRoundedClippedBox(
+      boxX, y, boxWidth, boxHeight, 6,
+      getSymmetricGradientColor(i, binCount),
+      `x${payouts[i].toFixed(1)}`
+    );
+  }
+}
+
+function draw() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  drawPins();
+  drawPayoutBoxes();
+
+  for (let i = balls.length - 1; i >= 0; i--) {
+    const result = balls[i].update(pins);
+    balls[i].draw();
+    if (result === "remove") balls.splice(i, 1);
+  }
+
+  requestAnimationFrame(draw);
+}
+
+// ✅ 更新右側最近紀錄顯示
+function addRecentPayout(binIndex, payout) {
+  const color = getSymmetricGradientColor(binIndex, binCount);
+  recentPayouts.unshift({ payout: payout.toFixed(1), color });
+  if (recentPayouts.length > 4) recentPayouts.pop();
+  updateRecentPayouts();
+}
+
+function updateRecentPayouts() {
+  const container = document.getElementById("recentPayoutsContainer");
+  container.innerHTML = "";
+  recentPayouts.forEach(item => {
+    const div = document.createElement("div");
+    div.className = "recentPayout";
+    div.style.background = item.color;
+    div.style.color = "#000";
+    div.innerText = `x${item.payout}`;
+    container.appendChild(div);
+  });
+}
+
+// ✅ 計算對稱漸層顏色，用於底部格子顏色
+function getSymmetricGradientColor(index, total) {
+  const mid = (total - 1) / 2;
+  const distance = Math.abs(index - mid) / mid;
+  let r = 255;
+  let g, b;
+
+  if (distance < 0.5) {
+    g = 210 - distance * 400;
+    b = 50;
+  } else {
+    g = 80 - (distance - 0.5) * 300;
+    b = 80 - (distance - 0.5) * 200;
+  }
+
+  g = Math.max(0, Math.min(255, Math.round(g)));
+  b = Math.max(0, Math.min(255, Math.round(b)));
+
+  return `rgb(${r},${g},${b})`;
+}
+
+// ✅ 建立釘子位置資料
+function setupPins() {
+  const totalRows = 17;
+  const skipRows = 2;
+  const gapY = 35;
+  const gapX = canvas.width / (binCount + 2);
+
+  for (let row = skipRows; row < totalRows; row++) {
+    const cols = row + 1;
+    const totalWidth = (cols - 1) * gapX;
+    const startX = (canvas.width - totalWidth) / 2;
+    const y = 80 + (row - skipRows) * gapY;
+
+    if (row === skipRows) {
+      firstRowRange.min = startX;
+      firstRowRange.max = startX + (cols - 1) * gapX;
+    }
+
+    for (let col = 0; col < cols; col++) {
+      pins.push({ x: startX + col * gapX, y, radius: pinRadius });
+      pinFlashTimers.push(0);
+    }
+  }
+}
+
+// ✅ 錢包儲值按鈕
+function topUpWallet() {
+  wallet += 1000;
+  updateWalletDisplay();
+}
+
+// ✅ 啟動初始化流程
+setupPins();
+updateWalletDisplay();
+updateRecentPayouts();
+draw();
+</script>
+</body>
+</html>
+
+
+
