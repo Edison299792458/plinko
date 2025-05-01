@@ -209,14 +209,14 @@ const pinFlashTimers = [];
 // ✅ 音效設定（為每個倍率建立 Audio 物件 + 設定個別音量）
 const payoutSounds = {
   0.2: new Audio("bin_sound_effect/1.mp3"),
-  0.4: new Audio("/Users/d/Desktop/Plinko_ball_Project/bin_sound_effect/2.mp3"),
-  0.6: new Audio("/Users/d/Desktop/Plinko_ball_Project/bin_sound_effect/3.mp3"),
-  1.0: new Audio("/Users/d/Desktop/Plinko_ball_Project/bin_sound_effect/4.mp3"),
-  1.5: new Audio("/Users/d/Desktop/Plinko_ball_Project/bin_sound_effect/5.mp3"),
-  2.0: new Audio("/Users/d/Desktop/Plinko_ball_Project/bin_sound_effect/6.mp3"),
-  4.0: new Audio("/Users/d/Desktop/Plinko_ball_Project/bin_sound_effect/7.mp3"),
-  10.0: new Audio("/Users/d/Desktop/Plinko_ball_Project/bin_sound_effect/8.mp3"),
-  100.0: new Audio("/Users/d/Desktop/Plinko_ball_Project/bin_sound_effect/9.mp3"),
+  0.4: new Audio("bin_sound_effect/2.mp3"),
+  0.6: new Audio("bin_sound_effect/3.mp3"),
+  1.0: new Audio("bin_sound_effect/4.mp3"),
+  1.5: new Audio("bin_sound_effect/5.mp3"),
+  2.0: new Audio("bin_sound_effect/6.mp3"),
+  4.0: new Audio("bin_sound_effect/7.mp3"),
+  10.0: new Audio("bin_sound_effect/8.mp3"),
+  100.0: new Audio("bin_sound_effect/9.mp3"),
 };
 
 // ✅ 設定各倍率音效的音量（可以調整這裡）
@@ -231,7 +231,7 @@ payoutSounds[10.0].volume = 0.6;
 payoutSounds[100.0].volume = 0.7;
 
 // 下注音效
-const betAudio = new Audio("/Users/d/Desktop/Plinko_ball_Project/bet.mp3");
+const betAudio = new Audio("bet.mp3");
 betAudio.volume = 0.5;
 
 function playBetSound() {
